@@ -10,16 +10,16 @@ import { TAddress } from './Checkout';
 const PRODUCT_PRICE = 3090.99;
 
 export default function Review({
-  shippingCost = 0,
+  selectedShippingCost = 0,
   formData
-}: { shippingCost?: number, formData: TAddress }) {
+}: { selectedShippingCost?: number, formData: TAddress }) {
   const products = [
     {
       name: 'Notebook',
       desc: 'Notebook dell',
       price: `R$${PRODUCT_PRICE}`,
     },
-    { name: 'Frete', desc: '', price: `R$${shippingCost}` },
+    { name: 'Frete', desc: '', price: `R$${selectedShippingCost}` },
   ];
 
   const addresses = [formData.street, formData.city, formData.district, formData.number, formData.cep];
@@ -44,7 +44,7 @@ export default function Review({
         <ListItem sx={{ py: 1, px: 0 }}>
           <ListItemText primary="Total" />
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            R${(shippingCost + PRODUCT_PRICE).toFixed(2)}
+            R${(selectedShippingCost + PRODUCT_PRICE).toFixed(2)}
           </Typography>
         </ListItem>
       </List>

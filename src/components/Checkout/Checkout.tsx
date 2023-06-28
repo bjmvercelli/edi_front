@@ -15,7 +15,7 @@ import AddressForm from './AddressForm';
 import PaymentForm from './PaymentForm';
 import Review from './Review';
 import { TShippingInfo } from './types';
-import { Alert, FormControl, FormControlLabel, FormLabel, Modal, Radio, RadioGroup, Snackbar, Tooltip } from '@mui/material';
+import { Alert, CircularProgress, FormControl, FormControlLabel, FormLabel, Modal, Radio, RadioGroup, Snackbar, Tooltip } from '@mui/material';
 
 const steps = ['Endereço', 'Pagamento', 'Revisão do pedido'];
 
@@ -59,12 +59,14 @@ export default function Checkout() {
     city: 'Campinas',
     state: 'SP'
   } as TAddress)
-  const [shippingInfo, setShippingInfo] = React.useState<TShippingInfo | null>(null);
+  const [shippingInfo, setShippingInfo] = React.useState<TShippingInfo[] | null>(null);
   const [showFreightModal, setShowFreightModal] = React.useState<boolean>(false);
-  const [freightType, setFreightType] = React.useState<'sedex' | 'pac' | null>(null);
+  const [selectedShipping, setSelectedShipping] = React.useState<TShippingInfo | null>(null);
   const [trackingCode, setTrackingCode] = React.useState<string>('');
   const [orderId, setOrderId] = React.useState<string>('');
   const [openSuccessModal, setOpenSuccessModal] = React.useState<boolean>(false);
+
+  const [isLoadingFreight, setIsLoadingFreight] = React.useState<boolean>(false);
 
   const handleNext = () => {
     setActiveStep(activeStep + 1);
@@ -77,10 +79,12 @@ export default function Checkout() {
   const handleGetShipping = async () => {
     const { cep, city, district, number, state, street, complement } = formData;
 
+    setShowFreightModal(true);
+    setIsLoadingFreight(true);
+
     const url = `
       http://localhost:3000/order/details?cep=${cep}&city=${city}&district=${district}&number=${number}&state=${state}&street=${street}&complement=${complement}
     `
-
     const res = await fetch(url, {
       method: 'GET',
       headers: {
@@ -88,10 +92,15 @@ export default function Checkout() {
       },
     });
 
+    if (res.status !== 200) {
+      setShowFreightModal(false);
+      return;
+    }
+
     const data = await res.json();
 
     setShippingInfo(data);
-    setShowFreightModal(true);
+    setIsLoadingFreight(false);
   }
 
   const handleFinishOrder = async () => {
@@ -113,7 +122,8 @@ export default function Checkout() {
         district: formData.district,
         city: formData.city,
         complement: formData.complement
-      }
+      },
+      deliveryTime: selectedShipping?.expectedDays,
     };
 
     const response = await fetch('http://localhost:3000/order/create', {
@@ -139,7 +149,7 @@ export default function Checkout() {
       },
     });
 
-    if (response.status === 204){
+    if (response.status === 204) {
       setOpenSuccessModal(true);
     } else {
       console.log('error');
@@ -153,12 +163,17 @@ export default function Checkout() {
       case 1:
         return <PaymentForm />;
       case 2:
-        return <Review shippingCost={shippingInfo?.shippingCost} formData={formData} />;
+        return <Review formData={formData} selectedShippingCost={selectedShipping?.shippingCost} />;
       default:
         throw new Error('Unknown step');
     }
   }
 
+  const handleSelectShipping = (service: string) => {
+    const selectedShipping = shippingInfo?.find((info) => info.service === service);
+
+    setSelectedShipping(selectedShipping as TShippingInfo);
+  }
 
   return (
     <ThemeProvider theme={defaultTheme}>
@@ -178,7 +193,7 @@ export default function Checkout() {
           </Typography>
         </Toolbar>
       </AppBar>
-      <Snackbar 
+      <Snackbar
         open={openSuccessModal}
         autoHideDuration={2000}
         onClose={() => setOpenSuccessModal(false)}
@@ -200,24 +215,42 @@ export default function Checkout() {
             }}
           >
             <Paper variant='elevation' sx={{ p: { xs: 2, md: 6 }, borderRadius: { sx: 2, md: 5 } }} >
-              <FormControl>
-                <FormLabel sx={{ mb: 3 }}>Selecione o tipo de frete</FormLabel>
-                <RadioGroup value={freightType}>
-                  <FormControlLabel
-                    value='sedex'
-                    control={<Radio />}
-                    sx={{ mb: 2 }}
-                    onChange={() => setFreightType('sedex')}
-                    label={<RadioLabel service='SEDEX' expectedDays={5} shippingCost={10} />}
-                  />
-                  <FormControlLabel
-                    value='pac'
-                    control={<Radio />}
-                    onChange={() => setFreightType('pac')}
-                    label={<RadioLabel service='PAC' expectedDays={5} shippingCost={15} />}
-                  />
-                </RadioGroup>
-              </FormControl>
+              {
+                isLoadingFreight ? (
+                  <CircularProgress />
+                ) : (
+                  <FormControl>
+                    <FormLabel sx={{ mb: 3 }}>Selecione o tipo de frete</FormLabel>
+                    <RadioGroup value={selectedShipping?.service}>
+                      <FormControlLabel
+                        value='sedex'
+                        control={<Radio />}
+                        sx={{ mb: 2 }}
+                        onChange={() => handleSelectShipping('SEDEX')}
+                        label={
+                          <RadioLabel
+                            service='SEDEX'
+                            expectedDays={shippingInfo?.find((info) => info.service === 'SEDEX')?.expectedDays as number}
+                            shippingCost={shippingInfo?.find((info) => info.service === 'SEDEX')?.shippingCost as number}
+                          />
+                        }
+                      />
+                      <FormControlLabel
+                        value='pac'
+                        control={<Radio />}
+                        onChange={() => handleSelectShipping('PAC')}
+                        label={
+                          <RadioLabel
+                            service='PAC'
+                            expectedDays={shippingInfo?.find((info) => info.service === 'PAC')?.expectedDays as number}
+                            shippingCost={shippingInfo?.find((info) => info.service === 'PAC')?.shippingCost as number}
+                          />
+                        }
+                      />
+                    </RadioGroup>
+                  </FormControl>
+                )
+              }
             </Paper>
           </Modal>
         )
@@ -244,7 +277,7 @@ export default function Checkout() {
                 Caso queira cancelar o pedido, clique no botão abaixo.
               </Typography>
               <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                <Button variant='contained' color='error'  onClick={() => handleCancelOrder()} sx={{ mt: 3, ml: 0 }}>
+                <Button variant='contained' color='error' onClick={() => handleCancelOrder()} sx={{ mt: 3, ml: 0 }}>
                   Cancelar
                 </Button>
               </Box>
@@ -258,7 +291,7 @@ export default function Checkout() {
                   activeStep === 0 ? (
                     <div style={{ display: 'flex' }}>
                       <Button variant='outlined' sx={{ mt: 3, ml: 1 }} onClick={() => handleGetShipping()}>
-                        Calcular Frete
+                        Consultar Frete
                       </Button>
                     </div>
                   ) : (<></>)
@@ -274,7 +307,7 @@ export default function Checkout() {
                       variant="contained"
                       onClick={activeStep !== steps.length - 1 ? handleNext : handleFinishOrder}
                       sx={{ mt: 3, ml: 1 }}
-                      disabled={!freightType}
+                      disabled={!selectedShipping}
                     >
                       {activeStep === steps.length - 1 ? 'Comprar' : 'Próximo'}
                     </Button>
